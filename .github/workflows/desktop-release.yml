@@ -8,16 +8,26 @@ on:
         type: boolean
         default: false
   push:
+    branches: ['main']
     tags: ['v*']
 permissions:
   contents: read
 jobs:
   build:
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: windows-latest
     outputs:
       release_tag: ${{ steps.version.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require release tag commit to be merged into main
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor $env:GITHUB_SHA origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'Release tags must reference a commit already merged into main.' }
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

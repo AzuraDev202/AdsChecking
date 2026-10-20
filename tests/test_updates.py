@@ -181,15 +181,5 @@ def assert_automatic_download_failure(monkeypatch):
     'assert_automatic_download_and_restart',
     'assert_automatic_download_failure',
 ])
-def test_desktop_update_in_isolated_tcl_process(scenario):
-    # Separate Tcl interpreters in fresh processes, as with the packaged desktop.
-    import subprocess
-    import sys
-    code = (
-        "import runpy, pytest; "
-        "scenarios = runpy.run_path('tests/test_updates.py'); "
-        f"scenarios[{scenario!r}](pytest.MonkeyPatch())"
-    )
-    result = subprocess.run([sys.executable, '-c', code], capture_output=True,
-                            text=True, timeout=20)
-    assert result.returncode == 0, result.stdout + result.stderr
+def test_desktop_update_in_isolated_tcl_process(scenario, run_desktop_scenario):
+    run_desktop_scenario('test_updates.py', scenario)

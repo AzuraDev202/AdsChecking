@@ -106,7 +106,7 @@ def test_proxy_failure_never_unlocks(monkeypatch):
     c.close()
 
 
-def test_desktop_initial_gate_and_proxy_edit():
+def assert_desktop_initial_gate_and_proxy_edit(monkeypatch):
     app = Desktop()
     app.withdraw()
     try:
@@ -133,7 +133,7 @@ def test_desktop_initial_gate_and_proxy_edit():
         app.close()
 
 
-def test_desktop_minimum_layout_keeps_table_and_status_visible():
+def assert_desktop_minimum_layout_keeps_table_and_status_visible(monkeypatch):
     app = Desktop()
     try:
         app.geometry('1000x780')
@@ -143,3 +143,11 @@ def test_desktop_minimum_layout_keeps_table_and_status_visible():
         assert app.progress.winfo_rooty() + app.progress.winfo_height() < app.winfo_rooty() + app.winfo_height()
     finally:
         app.close()
+
+
+def test_desktop_initial_gate_and_proxy_edit(run_desktop_scenario):
+    run_desktop_scenario('test_desktop.py', 'assert_desktop_initial_gate_and_proxy_edit')
+
+
+def test_desktop_minimum_layout_keeps_table_and_status_visible(run_desktop_scenario):
+    run_desktop_scenario('test_desktop.py', 'assert_desktop_minimum_layout_keeps_table_and_status_visible')

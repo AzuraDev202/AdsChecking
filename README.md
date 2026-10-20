@@ -30,9 +30,11 @@ Bản build chưa ký số; Windows có thể hiển thị cảnh báo nhà phá
 
 Script tạo `dist/AdsChecking-windows-x64.zip` và `dist/SHA256SUMS.txt`, đồng thời kiểm tra EXE khởi động và trạng thái khóa đăng nhập ban đầu. Chỉ mã ứng dụng cùng dependency được đóng gói; không thu thập `.env`, dữ liệu phiên hay thư mục kiểm thử.
 
-Workflow [Windows desktop](.github/workflows/desktop-release.yml) chạy kiểm thử, build và kiểm tra EXE trên Windows. Sau khi đưa thay đổi workflow và README lên GitHub, maintainer có quyền ghi thực hiện:
+Workflow [Windows desktop](.github/workflows/desktop-release.yml) tự chạy khi có push vào `main`, gồm cả commit do merge pull request: kiểm thử, build, smoke test EXE và lưu ZIP/checksum trong artifact. Thay đổi trên nhánh khác cần tạo PR và merge vào `main` trước; push nhánh khác hoặc chỉ mở PR không chạy workflow này. Build từ push vào `main` không tự xuất bản release.
 
-1. Vào **Actions → Windows desktop → Run workflow**, chọn nhánh chứa mã nguồn cần phát hành.
+Tag `v*` vẫn dùng để phát hành, nhưng commit gắn tag phải đã nằm trong lịch sử `main`; tag từ nhánh chưa merge sẽ bị chặn trước bước build. Để phát hành cho người dùng, maintainer có quyền ghi thực hiện:
+
+1. Merge thay đổi vào `main`, rồi vào **Actions → Windows desktop → Run workflow** và chọn **main**. Chạy thủ công từ nhánh khác sẽ bỏ qua job build.
 2. Bật **Publish the Windows ZIP and checksum to GitHub Releases** (`publish = true`), rồi chạy workflow. Nếu không bật, workflow chỉ tạo artifact kiểm tra; tải artifact trong trang lần chạy Actions (cần đăng nhập GitHub), giải nén artifact để lấy ZIP ứng dụng bên trong.
 3. Chờ cả job **build** và **release** hoàn tất. Workflow lấy phiên bản từ `APP_VERSION`, tạo tag tương ứng tại commit được build, tải ZIP và checksum vào release nháp rồi mới công khai thành bản mới nhất. Phiên bản phải chưa có release; nếu đã phát hành, tăng `APP_VERSION` trước khi chạy.
 4. Kiểm tra [Releases](https://github.com/AzuraDev202/AdsChecking/releases) có đủ `AdsChecking-windows-x64.zip` và `SHA256SUMS.txt`. Job release tải lại ZIP bằng URL công khai và đối chiếu checksum. Khi đã xác minh thành công, cập nhật dòng trạng thái tải ở đầu README.
@@ -141,5 +143,7 @@ Chỉ chạy một worker vì phiên OAuth dùng một lần được giữ tron
 ```
 
 Kiểm thử dùng HTTP giả lập cho OAuth, phân trang và quyền MCC; không chứng minh OAuth, proxy nhà cung cấp hay dữ liệu Google Ads thật hoạt động. Cần kiểm tra thực tế với cấu hình của người vận hành.
+
+Mỗi tình huống giao diện Tkinter chạy trong một tiến trình Python riêng để vòng đời Tcl/Tk không ảnh hưởng các bài kiểm thử tiếp theo. Lỗi khởi tạo cửa sổ vẫn làm bài kiểm thử thất bại; không bỏ qua hoặc tự thử lại.
 
 Tài liệu tham chiếu: [OAuth web server](https://developers.google.com/identity/protocols/oauth2/web-server), [HTTP headers Google Ads](https://developers.google.com/google-ads/api/rest/auth), [danh sách tài khoản truy cập](https://developers.google.com/google-ads/api/docs/account-management/listing-accounts).
