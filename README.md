@@ -4,7 +4,7 @@
 
 Bản desktop dành cho Windows 10/11 x64, không cần cài Python.
 
-1. Mở [GitHub Releases](https://github.com/AzuraDev202/AdsChecking/releases).
+1. [Tải ZIP Windows mới nhất](https://github.com/AzuraDev202/AdsChecking/releases/latest/download/AdsChecking-windows-x64.zip) hoặc mở [GitHub Releases](https://github.com/AzuraDev202/AdsChecking/releases/latest).
 2. Khi có bản phát hành, tải **AdsChecking-windows-x64.zip** trong mục **Assets** (không chọn Source code).
 3. Giải nén toàn bộ ZIP rồi mở `AdsChecking/AdsChecking.exe`. Giữ nguyên thư mục `_internal` bên cạnh EXE.
 4. Chuẩn bị proxy HTTP/HTTPS, OAuth Client ID, Client secret và Google Ads developer token của bạn. Ứng dụng không kèm thông tin đăng nhập.
@@ -21,6 +21,14 @@ Bản build chưa ký số; Windows có thể hiển thị cảnh báo nhà phá
 Script tạo `dist/AdsChecking-windows-x64.zip` và `dist/SHA256SUMS.txt`, đồng thời kiểm tra EXE khởi động và trạng thái khóa đăng nhập ban đầu. Chỉ mã ứng dụng cùng dependency được đóng gói; không thu thập `.env`, dữ liệu phiên hay thư mục kiểm thử.
 
 Workflow [Windows desktop](.github/workflows/desktop-release.yml) chạy kiểm thử, build và kiểm tra EXE trên Windows. Chạy thủ công bằng **Actions → Windows desktop → Run workflow** để tải artifact kiểm tra. Sau khi commit và push mã nguồn, maintainer tạo và push tag phiên bản, ví dụ `v0.1.0`, để workflow tự xuất bản ZIP và checksum vào GitHub Releases. Build tại máy không tự xuất bản release.
+
+### Thông báo cập nhật desktop
+
+App kiểm tra GitHub Releases khi mở và mỗi giờ khi đang chạy. Nút **Kiểm tra cập nhật** cho phép thử lại thủ công. Khi có bản ổn định mới hơn kèm ZIP Windows sẵn sàng, app hiển thị phiên bản và nút **Tải bản mới**. Lỗi mạng không chặn thao tác Google Ads.
+
+Kiểm tra chạy nền qua HTTPS trực tiếp đến API GitHub công khai, không gửi thông tin Google hay proxy đã nhập. Nút tải mở trình duyệt hệ thống. Sau khi kiểm tra SHA-256, đóng app rồi giải nén ZIP vào thư mục mới và mở EXE trong đó.
+
+Trước mỗi release, cập nhật `APP_VERSION` trong `adschecking/updates.py` và dùng tag tương ứng dạng `v1.2.3`. CI từ chối tag không khớp phiên bản. Link tải trực tiếp cần một release công khai có asset `AdsChecking-windows-x64.zip`; app không tự ghi đè EXE.
 
 ## Giao diện desktop
 

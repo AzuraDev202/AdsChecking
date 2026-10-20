@@ -16,6 +16,13 @@ jobs:
           architecture: x64
           cache: pip
       - run: python -m pip install -r requirements-build.txt
+      - name: Validate release tag matches desktop version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python -c "import os; from adschecking.updates import APP_VERSION, version_tuple; assert version_tuple(os.environ['RELEASE_TAG']) == version_tuple(APP_VERSION), 'Release tag must match APP_VERSION'"
       - run: python -m pytest -q
       - shell: pwsh
         run: ./build-desktop.ps1 -Python (Get-Command python).Source

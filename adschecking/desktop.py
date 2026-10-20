@@ -16,6 +16,7 @@ import httpx
 from cryptography.fernet import Fernet
 
 from .service import Service, ConnectionError
+from .updates import APP_VERSION, check_update
 
 
 class DesktopConnection:
@@ -144,6 +145,8 @@ class Desktop(tk.Tk):
         self.authenticated = False
         self.oauth_waiting = False
         self.manager_ready = False
+        self.update_busy = False
+        self.update_url = None
         style = ttk.Style(self)
         style.theme_use('clam')
         background, surface, ink, muted, accent = '#f3f6fa', '#ffffff', '#172b43', '#526479', '#126c60'
@@ -170,6 +173,13 @@ class Desktop(tk.Tk):
         root.pack(fill='both', expand=True)
         footer = ttk.Frame(root)
         footer.pack(side='bottom', fill='x')
+        updates = ttk.Frame(footer)
+        updates.pack(fill='x', pady=(4, 0))
+        self.update_status = tk.StringVar(value=f'Phiên bản {APP_VERSION}')
+        ttk.Label(updates, textvariable=self.update_status).pack(side='left')
+        self.update_button = ttk.Button(updates, text='Kiểm tra cập nhật', command=self.check_updates)
+        self.update_button.pack(side='right')
+        self.download_button = ttk.Button(updates, text='Tải bản mới', command=self.download_update)
         brand = ttk.Frame(root)
         brand.pack(fill='x', pady=(0, 4))
         ttk.Label(brand, text='ADS CHECKING / DESKTOP', style='Badge.TLabel').pack(side='left')
@@ -187,7 +197,7 @@ class Desktop(tk.Tk):
         ttk.Label(root, text='Định dạng: http://user:password@host:port • HTTP/HTTPS • Không chuyển sang mạng trực tiếp').pack(anchor='w', pady=6)
         self.proxy.trace_add('write', self.proxy_changed)
         credentials = ttk.LabelFrame(root, text='2. Thông tin ứng dụng Google', padding=8)
-        credentials.pack(fill='x', pady=8)
+        credentials.pack(fill='x', pady=4)
         self.fields = []
         for row, label in enumerate(['OAuth Client ID', 'OAuth Client secret', 'Developer token']):
             ttk.Label(credentials, text=label).grid(row=row, column=0, sticky='w', padx=(0, 12), pady=4)
@@ -196,7 +206,7 @@ class Desktop(tk.Tk):
             self.fields.append(entry)
         credentials.columnconfigure(1, weight=1)
         actions = ttk.Frame(root)
-        actions.pack(fill='x', pady=8)
+        actions.pack(fill='x', pady=4)
         self.login_button = ttk.Button(actions, text='Đăng nhập Google', style='Primary.TButton', command=self.login)
         self.login_button.pack(side='left')
         self.accounts_button = ttk.Button(actions, text='Tải tài khoản truy cập', command=self.accounts)
@@ -204,7 +214,7 @@ class Desktop(tk.Tk):
         self.cancel_button = ttk.Button(actions, text='Hủy / ngắt kết nối', command=self.disconnect)
         self.cancel_button.pack(side='left')
         manager = ttk.LabelFrame(root, text='3. Chọn hoặc nhập MCC', padding=8)
-        manager.pack(fill='x', pady=8)
+        manager.pack(fill='x', pady=4)
         self.manager_value = tk.StringVar()
         self.manager = ttk.Combobox(manager, width=35, textvariable=self.manager_value)
         self.manager.pack(side='left', fill='x', expand=True)
@@ -239,6 +249,44 @@ class Desktop(tk.Tk):
         self.refresh()
         self.proxy_entry.focus_set()
         self.after(100, self.poll)
+        self.after(1500, self.check_updates)
+
+    def check_updates(self):
+        if self.update_busy:
+            return
+        self.update_busy = True
+        self.update_button.configure(state='disabled')
+        self.update_status.set(f'Phiên bản {APP_VERSION} · Đang kiểm tra cập nhật…')
+        def worker():
+            try:
+                self.events.put(('update', check_update()))
+            except Exception:
+                self.events.put(('update_error', None))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def finish_update(self, kind, value):
+        self.update_busy = False
+        self.update_button.configure(state='normal')
+        if kind == 'update_error':
+            self.update_status.set(f'Phiên bản {APP_VERSION} · Chưa kiểm tra được cập nhật. Hãy thử lại.')
+        elif value:
+            version, self.update_url = value
+            self.update_status.set(f'Có bản mới {version} · Đang dùng {APP_VERSION}')
+            self.download_button.pack(side='right', padx=8)
+        else:
+            self.update_status.set(f'Phiên bản {APP_VERSION} · Chưa có bản ổn định mới hơn.')
+        if hasattr(self, 'update_timer'):
+            self.after_cancel(self.update_timer)
+        self.update_timer = self.after(3600000, self.check_updates)
+
+    def download_update(self):
+        if self.update_url:
+            if webbrowser.open(self.update_url):
+                messagebox.showinfo('Cập nhật AdsChecking',
+                    'Tải ZIP, kiểm tra SHA-256 trên GitHub Releases, rồi đóng ứng dụng '
+                    'và giải nén bản mới vào thư mục riêng. Mở AdsChecking.exe trong thư mục mới.')
+            else:
+                self.update_status.set('Không mở được trình duyệt. Hãy tải bản mới trên GitHub Releases.')
 
     def refresh(self):
         blocked = self.busy or self.oauth_waiting
@@ -299,6 +347,9 @@ class Desktop(tk.Tk):
         try:
             while True:
                 kind, value = self.events.get_nowait()
+                if kind in ('update', 'update_error'):
+                    self.finish_update(kind, value)
+                    continue
                 if kind == 'done':
                     self.busy = False
                     value[0](value[1])
@@ -380,10 +431,14 @@ class Desktop(tk.Tk):
         self.oauth_waiting = False
         # Drop completion events from a callback that finished while cancelling.
         try:
+            retained = []
             while True:
-                self.events.get_nowait()
+                event = self.events.get_nowait()
+                if event[0] in ('update', 'update_error'):
+                    retained.append(event)
         except queue.Empty:
-            pass
+            for event in retained:
+                self.events.put(event)
         if self.connection.service:
             self.connection.service.disconnect()
         self.clear_accounts()
@@ -397,6 +452,8 @@ class Desktop(tk.Tk):
         if self.listener:
             self.listener.close()
         self.connection.close()
+        for timer in self.tk.call('after', 'info'):
+            self.after_cancel(timer)
         self.destroy()
 
 
