@@ -147,104 +147,173 @@ class Desktop(tk.Tk):
         self.manager_ready = False
         self.update_busy = False
         self.update_url = None
+        self._progress_active = False
+        self.results_loaded = False
         style = ttk.Style(self)
         style.theme_use('clam')
-        background, surface, ink, muted, accent = '#f3f6fa', '#ffffff', '#172b43', '#526479', '#126c60'
+        background, surface, ink, muted, accent = '#f1f5f4', '#ffffff', '#202725', '#58625e', '#126c60'
         self.configure(background=background)
         style.configure('.', font=('Segoe UI', 10), background=background, foreground=ink)
-        style.configure('TLabel', background=background)
         style.configure('TFrame', background=background)
-        style.configure('TLabelframe', background=surface, bordercolor='#d9e2ec', relief='solid')
-        style.configure('TLabelframe.Label', font=('Segoe UI', 10, 'bold'), background=background, foreground=accent)
-        style.configure('TEntry', padding=4, fieldbackground=surface)
-        style.configure('TCombobox', padding=4)
-        style.configure('TButton', padding=(12, 6), background='#e4ebf2', borderwidth=0)
-        style.map('TButton', background=[('active', '#d2dee9')])
-        style.configure('Primary.TButton', background=accent, foreground='white')
-        style.map('Primary.TButton', background=[('disabled', '#e4ebf2'), ('active', '#0c554b')],
-                  foreground=[('disabled', '#677687')])
-        style.configure('Title.TLabel', font=('Segoe UI', 20, 'bold'))
+        style.configure('TLabel', background=background)
+        style.configure('Sheet.TFrame', background=surface)
+        style.configure('Sheet.TLabel', background=surface)
+        style.configure('Title.TLabel', font=('Segoe UI', 18, 'bold'))
+        style.configure('Section.TLabel', font=('Segoe UI', 11, 'bold'))
+        style.configure('SheetTitle.TLabel', font=('Segoe UI', 14, 'bold'), background=surface)
         style.configure('Muted.TLabel', foreground=muted)
-        style.configure('Badge.TLabel', foreground=accent, font=('Segoe UI', 10, 'bold'))
-        style.configure('Treeview', rowheight=32, background=surface, fieldbackground=surface, borderwidth=0)
-        style.configure('Treeview.Heading', font=('Segoe UI', 10, 'bold'), padding=9, background='#e4ebf2')
-        style.map('Treeview', background=[('selected', accent)], foreground=[('selected', 'white')])
-        root = ttk.Frame(self, padding=16)
+        style.configure('SheetMuted.TLabel', foreground=muted, background=surface)
+        style.configure('State.TLabel', foreground=muted, padding=(10, 5), background='#e6ece9')
+        style.configure('Ready.State.TLabel', foreground='#145b48', background='#e1eee7')
+        style.configure('Working.State.TLabel', foreground='#7a5214', background='#f7edda')
+        style.configure('TEntry', padding=(10, 7), fieldbackground=surface, bordercolor='#c6cfca',
+                        lightcolor=surface, darkcolor=surface, insertcolor=ink)
+        style.map('TEntry', bordercolor=[('focus', accent)],
+                  fieldbackground=[('disabled', '#e9eeeb')], foreground=[('disabled', '#626d67')])
+        style.configure('TCombobox', padding=(8, 7), fieldbackground=surface, bordercolor='#c6cfca')
+        style.map('TCombobox', bordercolor=[('focus', accent)],
+                  fieldbackground=[('disabled', '#f1f3f2')], foreground=[('disabled', '#626d67')])
+        style.configure('TButton', padding=(12, 7), background=surface, foreground=ink,
+                        bordercolor='#c6cfca', lightcolor=surface, darkcolor=surface, borderwidth=1)
+        style.map('TButton', background=[('disabled', '#edf1ef'), ('pressed', '#dbe3de'), ('active', '#e5ece8')],
+                  foreground=[('disabled', '#647168')], bordercolor=[('focus', accent)])
+        style.configure('Primary.TButton', background=ink, foreground=surface, bordercolor=ink)
+        style.map('Primary.TButton', background=[('disabled', '#e2e8e4'), ('pressed', '#101a15'), ('active', '#36473e')],
+                  foreground=[('disabled', '#647168')], bordercolor=[('disabled', '#e2e8e4'), ('focus', accent)])
+        style.configure('Quiet.TButton', background=background, bordercolor=background)
+        style.configure('Treeview', rowheight=38, background=surface, fieldbackground=surface,
+                        borderwidth=0, foreground=ink)
+        style.configure('Treeview.Heading', font=('Segoe UI', 9), foreground=muted,
+                        padding=(8, 10), background=surface, borderwidth=0, relief='flat')
+        style.map('Treeview.Heading', background=[('active', '#f0f4f1')])
+        style.map('Treeview', background=[('selected', '#e0ede6')], foreground=[('selected', '#154d39')])
+        style.configure('Horizontal.TProgressbar', background=accent, troughcolor='#e2e8e4',
+                        borderwidth=0, lightcolor=accent, darkcolor=accent, thickness=3)
+
+        # At 1160px: 24 + 340 + 24 + 748 + 24 = 1160; results take surplus width.
+        root = ttk.Frame(self, padding=24)
         root.pack(fill='both', expand=True)
+        header = ttk.Frame(root)
+        header.pack(fill='x', pady=(0, 20))
+        title = ttk.Frame(header)
+        title.pack(side='left')
+        ttk.Label(title, text='AdsChecking', style='Title.TLabel').pack(anchor='w')
+        ttk.Label(title, text='Không gian kết nối Google Ads', style='Muted.TLabel').pack(anchor='w', pady=(2, 0))
+        self.connection_state = tk.StringVar(value='Chưa kết nối')
+        self.state_badge = ttk.Label(header, textvariable=self.connection_state, style='State.TLabel')
+        self.state_badge.pack(side='right')
+
         footer = ttk.Frame(root)
-        footer.pack(side='bottom', fill='x')
+        footer.pack(side='bottom', fill='x', pady=(16, 0))
+        progress_track = ttk.Frame(footer, height=4)
+        progress_track.pack(fill='x')
+        self.progress = ttk.Progressbar(progress_track, mode='determinate')
+        self.progress.place(relwidth=1, relheight=1)
+        status_row = ttk.Frame(footer)
+        status_row.pack(fill='x', pady=(8, 4))
+        self.status = tk.StringVar(value='Nhập proxy để bắt đầu kết nối Google Ads.')
+        self.status_label = ttk.Label(status_row, textvariable=self.status, wraplength=790)
+        self.status_label.pack(side='left', fill='x', expand=True)
+        self.cancel_button = ttk.Button(status_row, text='Ngắt kết nối', style='Quiet.TButton', command=self.disconnect)
+        self.cancel_button.pack(side='right', padx=(12, 0))
         updates = ttk.Frame(footer)
-        updates.pack(fill='x', pady=(4, 0))
+        updates.pack(fill='x')
         self.update_status = tk.StringVar(value=f'Phiên bản {APP_VERSION}')
-        ttk.Label(updates, textvariable=self.update_status).pack(side='left')
-        self.update_button = ttk.Button(updates, text='Kiểm tra cập nhật', command=self.check_updates)
+        self.update_label = ttk.Label(updates, textvariable=self.update_status, style='Muted.TLabel', wraplength=650)
+        self.update_label.pack(side='left', fill='x', expand=True)
+        self.update_button = ttk.Button(updates, text='Kiểm tra cập nhật', style='Quiet.TButton', command=self.check_updates)
         self.update_button.pack(side='right')
         self.download_button = ttk.Button(updates, text='Tải bản mới', command=self.download_update)
-        brand = ttk.Frame(root)
-        brand.pack(fill='x', pady=(0, 4))
-        ttk.Label(brand, text='ADS CHECKING / DESKTOP', style='Badge.TLabel').pack(side='left')
-        self.connection_state = tk.StringVar(value='Chưa kết nối')
-        ttk.Label(brand, textvariable=self.connection_state, style='Badge.TLabel').pack(side='right')
-        ttk.Label(root, text='Kết nối Google Ads', style='Title.TLabel').pack(anchor='w')
-        ttk.Label(root, text='Proxy → Đăng nhập Google → Chọn MCC → Kiểm tra tài khoản con').pack(anchor='w', pady=(4, 8))
-        proxy_box = ttk.LabelFrame(root, text='1. Proxy bắt buộc — thực hiện trước tiên', padding=8)
-        proxy_box.pack(fill='x')
+
+        body = ttk.Frame(root)
+        body.pack(fill='both', expand=True)
+        body.columnconfigure(0, minsize=340)
+        body.columnconfigure(1, weight=1)
+        body.rowconfigure(0, weight=1)
+        setup = ttk.Frame(body, width=340)
+        setup.grid(row=0, column=0, sticky='nsew', padx=(0, 24))
+        ttk.Label(setup, text='Thiết lập kết nối', style='Section.TLabel').pack(anchor='w')
+        self.setup_hint = tk.StringVar(value='Xác minh proxy trước khi đăng nhập Google.')
+        ttk.Label(setup, textvariable=self.setup_hint, style='Muted.TLabel', wraplength=330).pack(anchor='w', pady=(4, 16))
+        ttk.Label(setup, text='Proxy HTTP / HTTPS').pack(anchor='w')
         self.proxy = tk.StringVar()
-        self.proxy_entry = ttk.Entry(proxy_box, textvariable=self.proxy, show='•', width=65)
-        self.proxy_entry.pack(side='left', fill='x', expand=True)
-        self.proxy_button = ttk.Button(proxy_box, text='Kiểm tra proxy', style='Primary.TButton', command=self.check_proxy)
-        self.proxy_button.pack(side='left', padx=(10, 0))
-        ttk.Label(root, text='Định dạng: http://user:password@host:port • HTTP/HTTPS • Không chuyển sang mạng trực tiếp').pack(anchor='w', pady=6)
+        self.proxy_entry = ttk.Entry(setup, textvariable=self.proxy, show='•', width=32)
+        self.proxy_entry.pack(fill='x', pady=(6, 8))
+        self.proxy_button = ttk.Button(setup, text='Kiểm tra proxy', style='Primary.TButton', command=self.check_proxy)
+        self.proxy_button.pack(fill='x')
+        ttk.Label(setup, text='http://user:password@host:port\nKhông chuyển sang mạng trực tiếp khi proxy lỗi.',
+                  style='Muted.TLabel', wraplength=330).pack(anchor='w', pady=(8, 16))
         self.proxy.trace_add('write', self.proxy_changed)
-        credentials = ttk.LabelFrame(root, text='2. Thông tin ứng dụng Google', padding=8)
-        credentials.pack(fill='x', pady=4)
         self.fields = []
-        for row, label in enumerate(['OAuth Client ID', 'OAuth Client secret', 'Developer token']):
-            ttk.Label(credentials, text=label).grid(row=row, column=0, sticky='w', padx=(0, 12), pady=4)
-            entry = ttk.Entry(credentials, width=70, show='•' if row else '')
-            entry.grid(row=row, column=1, sticky='ew', pady=4)
+        for label in ['OAuth Client ID', 'OAuth Client secret', 'Developer token']:
+            ttk.Label(setup, text=label).pack(anchor='w', pady=(0, 6))
+            entry = ttk.Entry(setup, width=32, show='' if label == 'OAuth Client ID' else '•')
+            entry.pack(fill='x', pady=(0, 8))
             self.fields.append(entry)
-        credentials.columnconfigure(1, weight=1)
-        actions = ttk.Frame(root)
-        actions.pack(fill='x', pady=4)
-        self.login_button = ttk.Button(actions, text='Đăng nhập Google', style='Primary.TButton', command=self.login)
-        self.login_button.pack(side='left')
-        self.accounts_button = ttk.Button(actions, text='Tải tài khoản truy cập', command=self.accounts)
-        self.accounts_button.pack(side='left', padx=8)
-        self.cancel_button = ttk.Button(actions, text='Hủy / ngắt kết nối', command=self.disconnect)
-        self.cancel_button.pack(side='left')
-        manager = ttk.LabelFrame(root, text='3. Chọn hoặc nhập MCC', padding=8)
-        manager.pack(fill='x', pady=4)
+        self.login_button = ttk.Button(setup, text='Đăng nhập Google', command=self.login)
+        self.login_button.pack(fill='x', pady=(4, 0))
+        ttk.Label(setup, text='Đăng nhập bằng trình duyệt hệ thống.\nCấu hình proxy trình duyệt riêng nếu cần.\nToken chỉ tồn tại trong phiên desktop.',
+                  style='Muted.TLabel', wraplength=330).pack(anchor='w', pady=(8, 0))
+
+        sheet = ttk.Frame(body, padding=20, style='Sheet.TFrame')
+        sheet.grid(row=0, column=1, sticky='nsew')
+        manager_heading = ttk.Frame(sheet, style='Sheet.TFrame')
+        manager_heading.pack(fill='x')
+        ttk.Label(manager_heading, text='Tài khoản quản lý', style='SheetTitle.TLabel').pack(side='left')
+        self.accounts_button = ttk.Button(manager_heading, text='Tải tài khoản truy cập', command=self.accounts)
+        self.accounts_button.pack(side='right')
+        ttk.Label(sheet, text='Chọn tài khoản truy cập hoặc nhập ID MCC để xác minh.',
+                  style='SheetMuted.TLabel').pack(anchor='w', pady=(8, 12))
+        manager_row = ttk.Frame(sheet, style='Sheet.TFrame')
+        manager_row.pack(fill='x')
         self.manager_value = tk.StringVar()
-        self.manager = ttk.Combobox(manager, width=35, textvariable=self.manager_value)
+        self.manager = ttk.Combobox(manager_row, width=24, textvariable=self.manager_value)
         self.manager.pack(side='left', fill='x', expand=True)
-        self.manager_button = ttk.Button(manager, text='Xác minh MCC', command=self.connect_manager)
-        self.manager_button.pack(side='left', padx=8)
-        self.clients_button = ttk.Button(manager, text='Tải tài khoản con', command=self.clients)
-        self.clients_button.pack(side='left')
+        self.manager_button = ttk.Button(manager_row, text='Xác minh MCC', command=self.connect_manager)
+        self.manager_button.pack(side='right', padx=(8, 0))
+        ttk.Separator(sheet).pack(fill='x', pady=20)
+        table_heading = ttk.Frame(sheet, style='Sheet.TFrame')
+        table_heading.pack(fill='x')
+        ttk.Label(table_heading, text='Cây tài khoản', style='SheetTitle.TLabel').pack(side='left')
+        self.clients_button = ttk.Button(table_heading, text='Tải tài khoản con', command=self.clients)
+        self.clients_button.pack(side='right')
+        self.result_summary = tk.StringVar(value='Chưa tải dữ liệu tài khoản.')
+        ttk.Label(sheet, textvariable=self.result_summary, style='SheetMuted.TLabel').pack(anchor='w', pady=(6, 16))
         columns = ('id', 'descriptiveName', 'status', 'manager', 'currencyCode', 'timeZone', 'level')
-        self.result_summary = tk.StringVar(value='Chưa có dữ liệu · Kết nối và xác minh MCC để tải tài khoản.')
-        ttk.Label(root, textvariable=self.result_summary, style='Muted.TLabel').pack(anchor='w', pady=(8, 4))
-        table_frame = ttk.Frame(root)
-        table_frame.pack(fill='both', expand=True, pady=8)
-        self.table = ttk.Treeview(table_frame, columns=columns, show='headings', height=3)
-        for key, label in zip(columns, ['ID', 'Tên tài khoản', 'Trạng thái', 'MCC', 'Tiền tệ', 'Múi giờ', 'Cấp']):
-            self.table.heading(key, text=label)
-            self.table.column(key, width=130 if key != 'level' else 45)
+        table_frame = ttk.Frame(sheet, style='Sheet.TFrame')
+        table_frame.pack(fill='both', expand=True)
+        self.table = ttk.Treeview(table_frame, columns=columns, show='headings', height=4)
+        widths = (122, 200, 110, 65, 72, 140, 48)
+        for key, label, width in zip(columns,
+                ['ID', 'Tên tài khoản', 'Trạng thái', 'MCC', 'Tiền tệ', 'Múi giờ', 'Cấp'], widths):
+            anchor = 'e' if key == 'level' else 'w'
+            self.table.heading(key, text=label, anchor=anchor)
+            self.table.column(key, width=width, minwidth=width, anchor=anchor, stretch=key == 'descriptiveName')
         self.table.pack(side='left', fill='both', expand=True)
         vertical = ttk.Scrollbar(table_frame, orient='vertical', command=self.table.yview)
         vertical.pack(side='right', fill='y')
         self.table.configure(yscrollcommand=vertical.set)
-        self.table.tag_configure('alternate', background='#f0f5f8')
-        scroll = ttk.Scrollbar(root, orient='horizontal', command=self.table.xview)
-        scroll.pack(fill='x')
+        scroll = ttk.Scrollbar(sheet, orient='horizontal', command=self.table.xview)
+        scroll.pack(fill='x', pady=(6, 0))
         self.table.configure(xscrollcommand=scroll.set)
+        self.empty_panel = ttk.Frame(table_frame, style='Sheet.TFrame', padding=16)
+        self.empty_title = tk.StringVar(value='Kết nối để xem tài khoản')
+        self.empty_detail = tk.StringVar(value='Kiểm tra proxy, đăng nhập Google rồi xác minh MCC.\nDanh sách tài khoản con sẽ xuất hiện tại đây.')
+        ttk.Label(self.empty_panel, textvariable=self.empty_title, style='SheetTitle.TLabel',
+                  anchor='center').pack(fill='x')
+        self.empty_description = ttk.Label(self.empty_panel, textvariable=self.empty_detail,
+                  style='SheetMuted.TLabel', justify='center', anchor='center', wraplength=400)
+        self.empty_description.pack(fill='x', pady=(8, 0))
         self.manager_value.trace_add('write', self.manager_changed)
-        self.status = tk.StringVar(value='Bắt đầu bằng cách nhập và kiểm tra proxy. Chưa kết nối Google.')
-        self.progress = ttk.Progressbar(footer, mode='indeterminate')
-        self.progress.pack(fill='x', pady=(8, 0))
-        ttk.Label(footer, textvariable=self.status, wraplength=940).pack(anchor='w', pady=8)
-        ttk.Label(footer, text='Đăng nhập mở trên trình duyệt hệ thống: cấu hình proxy trình duyệt riêng nếu cần.\nPhiên desktop không lưu thông tin đăng nhập lâu dài; đóng ứng dụng sẽ xóa token cục bộ.', wraplength=940, style='Muted.TLabel').pack(anchor='w')
+        def resize(event):
+            if event.widget is self:
+                self.status_label.configure(wraplength=max(400, event.width - 240))
+                self.update_label.configure(wraplength=max(350, event.width - 430))
+            elif event.widget is table_frame:
+                self.empty_description.configure(wraplength=max(200, event.width - 80))
+        self.bind('<Configure>', resize)
+        table_frame.bind('<Configure>', resize)
+
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.refresh()
         self.proxy_entry.focus_set()
@@ -294,13 +363,37 @@ class Desktop(tk.Tk):
         self.connection_state.set('Đang xử lý…' if self.busy else 'Chờ đăng nhập Google' if self.oauth_waiting
                                   else 'MCC đã xác minh' if self.manager_ready else 'Google đã kết nối'
                                   if self.authenticated else 'Proxy đã xác minh' if proxy_ok else 'Chưa kết nối')
-        self.progress.stop()
-        if blocked:
-            self.progress.start(16)
+        self.state_badge.configure(style='Working.State.TLabel' if blocked else
+                                   'Ready.State.TLabel' if proxy_ok else 'State.TLabel')
+        if blocked != self._progress_active:
+            self._progress_active = blocked
+            if blocked:
+                self.progress.configure(mode='indeterminate')
+                self.progress.start(16)
+            else:
+                self.progress.stop()
+                self.progress.configure(mode='determinate')
+                self.progress['value'] = 0
+        self.proxy_button.configure(style='TButton' if proxy_ok else 'Primary.TButton')
+        self.login_button.configure(style='Primary.TButton' if proxy_ok and not self.authenticated else 'TButton')
+        self.setup_hint.set('Đang chờ bạn hoàn tất đăng nhập trong trình duyệt.' if self.oauth_waiting else
+                            'Google đã kết nối. Chọn và xác minh MCC ở bên phải.' if self.authenticated else
+                            'Proxy đã sẵn sàng. Nhập thông tin ứng dụng Google.' if proxy_ok else
+                            'Xác minh proxy trước khi đăng nhập Google.')
+        if self.table.get_children():
+            self.empty_panel.place_forget()
         else:
-            self.progress['value'] = 0
-        if not self.table.get_children():
-            self.result_summary.set('Chưa có dữ liệu · Kết nối và xác minh MCC để tải tài khoản.')
+            self.empty_panel.place(relx=0.5, rely=0.56, relwidth=0.94, anchor='center')
+            self.empty_title.set('Đang tải dữ liệu…' if self.busy else
+                                 'Chưa có tài khoản con' if self.results_loaded else
+                                 'Sẵn sàng tải cây tài khoản' if self.manager_ready else
+                                 'Chọn tài khoản quản lý' if self.authenticated else
+                                 'Kết nối để xem tài khoản')
+            self.empty_detail.set('Dữ liệu sẽ hiển thị khi thao tác hoàn tất.' if self.busy else
+                                  'MCC này chưa trả về tài khoản con. Bạn có thể tải lại.' if self.results_loaded else
+                                  'Bấm Tải tài khoản con để đọc cây MCC đã xác minh.' if self.manager_ready else
+                                  'Tải tài khoản truy cập hoặc nhập ID MCC, rồi bấm Xác minh MCC.' if self.authenticated else
+                                  'Kiểm tra proxy, đăng nhập Google rồi xác minh MCC.\nDanh sách tài khoản con sẽ xuất hiện tại đây.')
         for widget in (self.proxy_entry, self.proxy_button):
             widget.configure(state='disabled' if blocked else 'normal')
         for widget in self.fields:
@@ -315,12 +408,16 @@ class Desktop(tk.Tk):
 
     def clear_accounts(self):
         self.authenticated = self.manager_ready = False
+        self.results_loaded = False
+        self.result_summary.set('Chưa tải dữ liệu tài khoản.')
         self.manager.set('')
         self.manager.configure(values=())
         self.table.delete(*self.table.get_children())
 
     def manager_changed(self, *_):
         self.manager_ready = False
+        self.results_loaded = False
+        self.result_summary.set('Chưa tải dữ liệu tài khoản.')
         self.table.delete(*self.table.get_children())
         self.refresh()
 
@@ -408,6 +505,8 @@ class Desktop(tk.Tk):
     def connect_manager(self):
         value = self.manager.get()
         self.manager_ready = False
+        self.results_loaded = False
+        self.result_summary.set('Chưa tải dữ liệu tài khoản.')
         self.table.delete(*self.table.get_children())
         def done(_):
             self.manager_ready = True
@@ -417,9 +516,9 @@ class Desktop(tk.Tk):
     def clients(self):
         def done(rows):
             self.table.delete(*self.table.get_children())
-            for index, row in enumerate(rows):
-                self.table.insert('', 'end', values=[row.get(k, '') for k in self.table['columns']],
-                                  tags=('alternate',) if index % 2 else ())
+            self.results_loaded = True
+            for row in rows:
+                self.table.insert('', 'end', values=[row.get(k, '—') for k in self.table['columns']])
             self.result_summary.set(f'{len(rows)} tài khoản · Cây tài khoản MCC')
             self.status.set(f'Đã tải {len(rows)} tài khoản trong cây MCC (có thể gồm MCC trung gian).')
         self.run(self.connection.service.clients, done)

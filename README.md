@@ -32,6 +32,8 @@ Trước mỗi release, cập nhật `APP_VERSION` trong `adschecking/updates.py
 
 ## Giao diện desktop
 
+Giao diện chia hai vùng: thiết lập proxy và đăng nhập ở bên trái, chọn MCC và cây tài khoản ở bên phải. Trạng thái kết nối và hướng dẫn bước tiếp theo cập nhật theo phiên; thanh tiến trình chạy trong lúc xử lý. Khu vực cập nhật phiên bản nằm riêng ở cuối cửa sổ.
+
 Sau khi cài dependency theo phần dưới, chạy `./start-desktop.ps1` trong PowerShell hoặc `.venv/Scripts/python -m adschecking.desktop`.
 
 1. **Nhập và kiểm tra proxy trước tiên.** Các ô Google và nút kết nối bị khóa đến khi proxy được xác minh. Nhập URL `http://user:password@host:port` hoặc proxy HTTPS; trường này được che để bảo vệ mật khẩu.
