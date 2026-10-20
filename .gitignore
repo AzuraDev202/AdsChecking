@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.desktop-test-*/
+.env
+data/
+*.egg-info/
+Key
+build/
+dist/
+*.spec
