@@ -152,6 +152,13 @@ class OAuthListener:
 class Desktop(tk.Tk):
     def __init__(self):
         super().__init__()
+        if sys.platform == 'win32':
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('AdsChecking.Desktop')
+        self.app_icon = tk.PhotoImage(file=str(Path(__file__).with_name('assets') / 'app.png'))
+        self.iconphoto(True, self.app_icon)
+        if sys.platform == 'win32':
+            self.iconbitmap(str(Path(__file__).with_name('assets') / 'app.ico'))
         self.title('AdsChecking • Kiểm tra kết nối Google Ads')
         self.geometry('1160x820')
         self.minsize(1000, 780)
