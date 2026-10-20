@@ -51,6 +51,10 @@ Trước mỗi release, cập nhật `APP_VERSION` trong `adschecking/updates.py
 
 ## Giao diện desktop
 
+Sau khi bấm **Kiểm tra proxy**, mục **IP đầu ra** hiển thị IPv4/IPv6 mà dịch vụ [ipify](https://www.ipify.org) quan sát được qua chính proxy đã nhập, kèm thời điểm kiểm tra và múi giờ máy. Đổi proxy sẽ xóa kết quả cũ. Nếu chỉ bước lấy IP thất bại, app ghi “chưa lấy được”; kết quả kiểm tra kết nối Google vẫn được giữ, có thể bấm kiểm tra lại.
+
+IP này là kết quả tại thời điểm kiểm tra với ipify, không phải giám sát liên tục và không bảo đảm Google thấy cùng IP khi proxy xoay IP hoặc định tuyến theo đích. Yêu cầu lấy IP không gửi token Google và không chuyển sang kết nối trực tiếp khi lỗi. Trình duyệt đăng nhập vẫn dùng cấu hình mạng riêng.
+
 Giao diện chia hai vùng: thiết lập proxy và đăng nhập ở bên trái, chọn MCC và cây tài khoản ở bên phải. Trạng thái kết nối và hướng dẫn bước tiếp theo cập nhật theo phiên; thanh tiến trình chạy trong lúc xử lý. Khu vực cập nhật phiên bản nằm riêng ở cuối cửa sổ.
 
 Sau khi cài dependency theo phần dưới, chạy `./start-desktop.ps1` trong PowerShell hoặc `.venv/Scripts/python -m adschecking.desktop`.

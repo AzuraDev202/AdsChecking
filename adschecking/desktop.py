@@ -1,5 +1,7 @@
 """Desktop connection tester. Run with python -m adschecking.desktop."""
 import queue
+import ipaddress
+from datetime import datetime
 import secrets
 import tempfile
 import threading
@@ -22,11 +24,15 @@ from .updates import APP_VERSION, check_update
 class DesktopConnection:
     def __init__(self):
         self.proxy = None
+        self.exit_ip = None
+        self.ip_checked_at = None
         self.service = None
         self.storage = tempfile.TemporaryDirectory(prefix='adschecking-')
 
     def reset(self):
         self.proxy = None
+        self.exit_ip = None
+        self.ip_checked_at = None
         if self.service:
             self.service.disconnect()
             self.service.client.close()
@@ -49,6 +55,15 @@ class DesktopConnection:
                 response.raise_for_status()
                 if response.json().get('issuer') != 'https://accounts.google.com':
                     raise ValueError()
+                # Same proxy transport, no direct fallback or Google credentials.
+                try:
+                    result = client.get('https://api64.ipify.org?format=json', timeout=8)
+                    result.raise_for_status()
+                    self.exit_ip = str(ipaddress.ip_address(result.json()['ip']))
+                    self.ip_checked_at = datetime.now().astimezone()
+                except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                    self.exit_ip = None
+                    self.ip_checked_at = None
         except (httpx.HTTPError, ValueError):
             raise ConnectionError('Kiểm tra proxy thất bại. Kiểm tra địa chỉ, xác thực và kết nối; không dùng kết nối trực tiếp.') from None
         self.proxy = value
@@ -242,7 +257,9 @@ class Desktop(tk.Tk):
         self.proxy_button = ttk.Button(setup, text='Kiểm tra proxy', style='Primary.TButton', command=self.check_proxy)
         self.proxy_button.pack(fill='x')
         ttk.Label(setup, text='http://user:password@host:port\nKhông chuyển sang mạng trực tiếp khi proxy lỗi.',
-                  style='Muted.TLabel', wraplength=330).pack(anchor='w', pady=(8, 16))
+                  style='Muted.TLabel', wraplength=330).pack(anchor='w', pady=(8, 4))
+        self.proxy_ip = tk.StringVar(value='IP đầu ra: chưa kiểm tra')
+        ttk.Label(setup, textvariable=self.proxy_ip, style='Muted.TLabel', wraplength=310).pack(anchor='w', pady=(0, 8))
         self.proxy.trace_add('write', self.proxy_changed)
         self.fields = []
         for label in ['OAuth Client ID', 'OAuth Client secret', 'Developer token']:
@@ -252,7 +269,7 @@ class Desktop(tk.Tk):
             self.fields.append(entry)
         self.login_button = ttk.Button(setup, text='Đăng nhập Google', command=self.login)
         self.login_button.pack(fill='x', pady=(4, 0))
-        ttk.Label(setup, text='Đăng nhập bằng trình duyệt hệ thống.\nCấu hình proxy trình duyệt riêng nếu cần.\nToken chỉ tồn tại trong phiên desktop.',
+        ttk.Label(setup, text='Trình duyệt đăng nhập dùng mạng riêng.\nToken chỉ tồn tại trong phiên desktop.',
                   style='Muted.TLabel', wraplength=330).pack(anchor='w', pady=(8, 0))
 
         sheet = ttk.Frame(body, padding=20, style='Sheet.TFrame')
@@ -360,6 +377,12 @@ class Desktop(tk.Tk):
     def refresh(self):
         blocked = self.busy or self.oauth_waiting
         proxy_ok = bool(self.connection.proxy)
+        if self.connection.exit_ip:
+            checked = self.connection.ip_checked_at.strftime('%H:%M:%S %d/%m/%Y %z')
+            self.proxy_ip.set(f'IP đầu ra: {self.connection.exit_ip}\nKiểm tra lúc {checked}')
+        else:
+            self.proxy_ip.set('IP đầu ra: chưa lấy được · Bấm Kiểm tra proxy để thử lại.' if proxy_ok
+                              else 'IP đầu ra: chưa kiểm tra')
         self.connection_state.set('Đang xử lý…' if self.busy else 'Chờ đăng nhập Google' if self.oauth_waiting
                                   else 'MCC đã xác minh' if self.manager_ready else 'Google đã kết nối'
                                   if self.authenticated else 'Proxy đã xác minh' if proxy_ok else 'Chưa kết nối')
@@ -468,8 +491,10 @@ class Desktop(tk.Tk):
     def check_proxy(self):
         value = self.proxy.get().strip()
         self.clear_accounts()
+        self.connection.reset()
         self.run(lambda: self.connection.check_proxy(value),
                  lambda _: self.status.set('Proxy đã kiểm tra thành công. Nhập thông tin Google để tiếp tục; quyền Ads chưa được xác minh.'))
+        self.proxy_ip.set('IP đầu ra: đang kiểm tra qua proxy…')
 
     def login(self):
         try:
