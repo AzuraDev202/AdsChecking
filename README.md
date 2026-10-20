@@ -74,7 +74,7 @@ Giao diện chia hai vùng: thiết lập proxy và đăng nhập ở bên trái
 
 Sau khi cài dependency theo phần dưới, chạy `./start-desktop.ps1` trong PowerShell hoặc `.venv/Scripts/python -m adschecking.desktop`.
 
-1. **Nhập và kiểm tra proxy trước tiên.** Các ô Google và nút kết nối bị khóa đến khi proxy được xác minh. Nhập URL `http://user:password@host:port` hoặc proxy HTTPS; trường này được che để bảo vệ mật khẩu.
+1. **Nhập và kiểm tra proxy trước tiên.** Các ô Google và nút kết nối bị khóa đến khi proxy được xác minh. Từ bản **0.2.2**, nhập `host:port:user:password`, ví dụ `proxy.example:8080:alice:secret`. App tự chuyển thành proxy HTTP và mã hóa ký tự đặc biệt trong thông tin đăng nhập; mật khẩu có thể chứa dấu `:`. Với IPv6, dùng `[2001:db8::1]:8080:user:password`. Trường nhập vẫn được che để bảo vệ mật khẩu. URL HTTP/HTTPS cũ vẫn dùng được; proxy HTTPS cần nhập dạng `https://user:password@host:port`. Biến môi trường `ADS_PROXY_URL` của backend vẫn dùng URL như trước.
 2. Nhập OAuth Client ID, Client secret và developer token trực tiếp trên desktop; không cần thiết lập biến môi trường cho chế độ desktop.
 3. Bấm **Đăng nhập Google**, hoàn tất cấp quyền trên trình duyệt hệ thống. OAuth client loại Web phải đăng ký redirect URI `http://127.0.0.1:8000/oauth/callback`. Không chạy backend cổng 8000 cùng lúc.
 4. Bấm **Tải tài khoản truy cập**, chọn hoặc nhập MCC, bấm **Xác minh MCC**, rồi **Tải tài khoản con**.

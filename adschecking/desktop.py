@@ -1,5 +1,6 @@
 """Desktop connection tester. Run with python -m adschecking.desktop."""
 import queue
+import re
 import sys
 import ipaddress
 from datetime import datetime
@@ -13,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from tkinter import ttk, messagebox
 from types import SimpleNamespace
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlsplit, quote
 
 import httpx
 from cryptography.fernet import Fernet
@@ -21,6 +22,35 @@ from cryptography.fernet import Fernet
 from .service import Service, ConnectionError
 from .updates import APP_VERSION, check_update
 from .updater import update_kind, prepare_update, discard_update, launch_installer
+
+
+def normalize_proxy(value):
+    """Accept desktop host:port:user:password; preserve HTTP(S) URL compatibility."""
+    error = 'Nhập proxy dạng host:port:user:password với port từ 1 đến 65535.'
+    try:
+        if any(ord(char) < 32 or ord(char) == 127 for char in value):
+            raise ValueError()
+        value = value.strip()
+        if not re.match(r'^[A-Za-z][A-Za-z0-9+.-]*://', value):
+            if value.startswith('['):
+                host, rest = value.split(']:', 1)
+                ipaddress.IPv6Address(host[1:])
+                host += ']'
+                port, user, password = rest.split(':', 2)
+            else:
+                host, port, user, password = value.split(':', 3)
+                if not re.fullmatch(r'[A-Za-z0-9.-]+', host):
+                    raise ValueError()
+            if not re.fullmatch(r'[0-9]+', port) or not 1 <= int(port) <= 65535 or not user or not password:
+                raise ValueError()
+            value = f'http://{quote(user, safe="")}:{quote(password, safe="")}@{host}:{int(port)}'
+        parsed = urlsplit(value)
+        if (parsed.scheme not in ('http', 'https') or not parsed.hostname or not parsed.port
+                or parsed.path not in ('', '/') or parsed.query or parsed.fragment):
+            raise ValueError()
+        return value
+    except (ValueError, TypeError):
+        raise ConnectionError(error) from None
 
 
 class DesktopConnection:
@@ -42,14 +72,7 @@ class DesktopConnection:
 
     def check_proxy(self, value):
         self.reset()
-        try:
-            parsed = urlsplit(value)
-            valid = (parsed.scheme in ('http', 'https') and parsed.hostname and parsed.port
-                     and parsed.path in ('', '/') and not parsed.query and not parsed.fragment)
-        except ValueError:
-            valid = False
-        if not valid:
-            raise ConnectionError('Nhập proxy HTTP/HTTPS có host và port hợp lệ.')
+        value = normalize_proxy(value)
         try:
             with httpx.Client(proxy=value, trust_env=False, verify=True,
                               timeout=20, follow_redirects=False) as client:
@@ -263,13 +286,13 @@ class Desktop(tk.Tk):
         ttk.Label(setup, text='Thiết lập kết nối', style='Section.TLabel').pack(anchor='w')
         self.setup_hint = tk.StringVar(value='Xác minh proxy trước khi đăng nhập Google.')
         ttk.Label(setup, textvariable=self.setup_hint, style='Muted.TLabel', wraplength=330).pack(anchor='w', pady=(4, 16))
-        ttk.Label(setup, text='Proxy HTTP / HTTPS').pack(anchor='w')
+        ttk.Label(setup, text='Proxy · host:port:user:password').pack(anchor='w')
         self.proxy = tk.StringVar()
         self.proxy_entry = ttk.Entry(setup, textvariable=self.proxy, show='•', width=32)
         self.proxy_entry.pack(fill='x', pady=(6, 8))
         self.proxy_button = ttk.Button(setup, text='Kiểm tra proxy', style='Primary.TButton', command=self.check_proxy)
         self.proxy_button.pack(fill='x')
-        ttk.Label(setup, text='http://user:password@host:port\nKhông chuyển sang mạng trực tiếp khi proxy lỗi.',
+        ttk.Label(setup, text='Ví dụ: proxy.example:8080:user:password\nKhông chuyển sang mạng trực tiếp khi proxy lỗi.',
                   style='Muted.TLabel', wraplength=330).pack(anchor='w', pady=(8, 4))
         self.proxy_ip = tk.StringVar(value='IP đầu ra: chưa kiểm tra')
         ttk.Label(setup, textvariable=self.proxy_ip, style='Muted.TLabel', wraplength=310).pack(anchor='w', pady=(0, 8))
@@ -552,6 +575,12 @@ class Desktop(tk.Tk):
         value = self.proxy.get().strip()
         self.clear_accounts()
         self.connection.reset()
+        try:
+            value = normalize_proxy(value)
+        except ConnectionError as exc:
+            self.status.set(str(exc))
+            self.refresh()
+            return
         self.run(lambda: self.connection.check_proxy(value),
                  lambda _: self.status.set('Proxy đã kiểm tra thành công. Nhập thông tin Google để tiếp tục; quyền Ads chưa được xác minh.'))
         self.proxy_ip.set('IP đầu ra: đang kiểm tra qua proxy…')
