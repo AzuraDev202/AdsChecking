@@ -4,7 +4,7 @@ from adschecking import updates
 from adschecking.desktop import Desktop
 
 
-def release(tag='v0.2.0'):
+def release(tag='v0.3.0'):
     return {'tag_name': tag, 'assets': [{
         'name': 'AdsChecking-windows-x64.zip', 'state': 'uploaded', 'size': 123,
         'browser_download_url': updates.REPOSITORY + '/releases/download/' + tag + '/AdsChecking-windows-x64.zip'}]}
@@ -25,10 +25,10 @@ def mock_release(monkeypatch, data, status=200):
 
 def test_new_release_pins_zip(monkeypatch):
     mock_release(monkeypatch, release())
-    assert updates.check_update() == ('v0.2.0', release()['assets'][0]['browser_download_url'])
+    assert updates.check_update() == ('v0.3.0', release()['assets'][0]['browser_download_url'])
 
 
-@pytest.mark.parametrize('tag', ['v0.1.0', 'v0.0.9'])
+@pytest.mark.parametrize('tag', ['v0.2.0', 'v0.1.0', 'v0.0.9'])
 def test_no_upgrade(monkeypatch, tag):
     mock_release(monkeypatch, release(tag))
     assert updates.check_update() is None
@@ -116,9 +116,70 @@ def assert_background_check_and_download(monkeypatch):
         app.close()
 
 
+def assert_automatic_download_and_restart(monkeypatch):
+    import tempfile
+    import time
+    from pathlib import Path
+    from adschecking import desktop
+    with tempfile.TemporaryDirectory() as cache:
+        staged = Path(cache) / 'job' / 'payload' / 'AdsChecking'
+        staged.mkdir(parents=True)
+        app = Desktop()
+        app.withdraw()
+        monkeypatch.setattr(desktop.sys, 'frozen', True, raising=False)
+        monkeypatch.setattr(desktop, 'prepare_update', lambda *args: staged)
+        installed = []
+        monkeypatch.setattr(desktop, 'launch_installer', installed.append)
+        monkeypatch.setattr(desktop.messagebox, 'showinfo', lambda *args: None)
+        try:
+            app.finish_update('update', ('v0.2.1', updates.DOWNLOAD_URL))
+            deadline = time.monotonic() + 3
+            while app.update_busy and time.monotonic() < deadline:
+                app.update()
+                time.sleep(0.01)
+            assert app.staged_update == staged
+            assert 'v0.2.1' in app.update_status.get()
+            assert str(app.download_button['state']) == 'normal'
+            app.busy = True
+            app.download_update()
+            assert not installed
+            app.busy = False
+            app.download_update()
+            assert installed == [staged]
+            assert app.applying_update
+        finally:
+            if not app.applying_update:
+                app.busy = False
+                app.close()
+
+
+def assert_automatic_download_failure(monkeypatch):
+    import time
+    from adschecking import desktop
+    app = Desktop()
+    app.withdraw()
+    monkeypatch.setattr(desktop.sys, 'frozen', True, raising=False)
+    def fail(*args):
+        raise ValueError('checksum mismatch')
+    monkeypatch.setattr(desktop, 'prepare_update', fail)
+    try:
+        app.finish_update('update', ('v0.3.0', updates.DOWNLOAD_URL))
+        deadline = time.monotonic() + 3
+        while app.update_busy and time.monotonic() < deadline:
+            app.update()
+            time.sleep(0.01)
+        assert not app.update_busy and app.staged_update is None
+        assert str(app.update_button['state']) == 'normal'
+        assert str(app.login_button['state']) == 'disabled'
+    finally:
+        app.close()
+
+
 @pytest.mark.parametrize('scenario', [
     'assert_update_banner_does_not_unlock_google',
     'assert_background_check_and_download',
+    'assert_automatic_download_and_restart',
+    'assert_automatic_download_failure',
 ])
 def test_desktop_update_in_isolated_tcl_process(scenario):
     # Separate Tcl interpreters in fresh processes, as with the packaged desktop.

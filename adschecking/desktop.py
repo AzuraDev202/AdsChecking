@@ -1,5 +1,6 @@
 """Desktop connection tester. Run with python -m adschecking.desktop."""
 import queue
+import sys
 import ipaddress
 from datetime import datetime
 import secrets
@@ -19,6 +20,7 @@ from cryptography.fernet import Fernet
 
 from .service import Service, ConnectionError
 from .updates import APP_VERSION, check_update
+from .updater import update_kind, prepare_update, discard_update, launch_installer
 
 
 class DesktopConnection:
@@ -162,6 +164,10 @@ class Desktop(tk.Tk):
         self.manager_ready = False
         self.update_busy = False
         self.update_url = None
+        self.staged_update = None
+        self.applying_update = False
+        self.update_lock = threading.Lock()
+        self.update_closed = False
         self._progress_active = False
         self.results_loaded = False
         style = ttk.Style(self)
@@ -338,7 +344,7 @@ class Desktop(tk.Tk):
         self.after(1500, self.check_updates)
 
     def check_updates(self):
-        if self.update_busy:
+        if self.update_busy or self.staged_update:
             return
         self.update_busy = True
         self.update_button.configure(state='disabled')
@@ -357,8 +363,27 @@ class Desktop(tk.Tk):
             self.update_status.set(f'Phiên bản {APP_VERSION} · Chưa kiểm tra được cập nhật. Hãy thử lại.')
         elif value:
             version, self.update_url = value
-            self.update_status.set(f'Có bản mới {version} · Đang dùng {APP_VERSION}')
+            label = 'bản vá' if update_kind(version) == 'patch' else 'bản cập nhật tính năng'
+            self.update_status.set(f'Có {label} {version} · Đang dùng {APP_VERSION}')
             self.download_button.pack(side='right', padx=8)
+            if getattr(sys, 'frozen', False):
+                self.update_busy = True
+                self.update_button.configure(state='disabled')
+                self.download_button.configure(state='disabled', text='Đang tải nền…')
+                self.update_status.set(f'Đang tải {label} {version} trong nền…')
+                def worker():
+                    staged = None
+                    try:
+                        staged = prepare_update(version, self.update_url)
+                        event = ('update_ready', (version, label, staged))
+                    except Exception:
+                        event = ('update_download_error', None)
+                    with self.update_lock:
+                        if self.update_closed:
+                            discard_update(staged)
+                        else:
+                            self.events.put(event)
+                threading.Thread(target=worker, daemon=True).start()
         else:
             self.update_status.set(f'Phiên bản {APP_VERSION} · Chưa có bản ổn định mới hơn.')
         if hasattr(self, 'update_timer'):
@@ -366,6 +391,21 @@ class Desktop(tk.Tk):
         self.update_timer = self.after(3600000, self.check_updates)
 
     def download_update(self):
+        if self.staged_update:
+            if self.busy or self.oauth_waiting:
+                messagebox.showinfo('Đang xử lý', 'Hoàn tất hoặc hủy thao tác Google trước khi khởi động lại.')
+                return
+            try:
+                launch_installer(self.staged_update)
+            except Exception:
+                self.update_status.set('Chưa thể cài cập nhật. Kiểm tra quyền ghi thư mục app rồi thử lại.')
+                return
+            self.applying_update = True
+            self.close()
+            return
+        if getattr(sys, 'frozen', False):
+            self.check_updates()
+            return
         if self.update_url:
             if webbrowser.open(self.update_url):
                 messagebox.showinfo('Cập nhật AdsChecking',
@@ -470,6 +510,19 @@ class Desktop(tk.Tk):
                 if kind in ('update', 'update_error'):
                     self.finish_update(kind, value)
                     continue
+                if kind == 'update_ready':
+                    version, label, self.staged_update = value
+                    self.update_busy = False
+                    self.update_status.set(f'{label.capitalize()} {version} đã sẵn sàng. Khởi động lại để áp dụng.')
+                    self.download_button.configure(state='normal', text='Khởi động lại để cập nhật')
+                    self.update_button.configure(state='disabled')
+                    continue
+                if kind == 'update_download_error':
+                    self.update_busy = False
+                    self.update_status.set('Tải hoặc xác minh cập nhật thất bại. App hiện tại vẫn hoạt động.')
+                    self.download_button.configure(state='normal', text='Thử tải lại')
+                    self.update_button.configure(state='normal')
+                    continue
                 if kind == 'done':
                     self.busy = False
                     value[0](value[1])
@@ -558,7 +611,7 @@ class Desktop(tk.Tk):
             retained = []
             while True:
                 event = self.events.get_nowait()
-                if event[0] in ('update', 'update_error'):
+                if event[0].startswith('update'):
                     retained.append(event)
         except queue.Empty:
             for event in retained:
@@ -576,6 +629,14 @@ class Desktop(tk.Tk):
         if self.listener:
             self.listener.close()
         self.connection.close()
+        with self.update_lock:
+            self.update_closed = True
+            while not self.events.empty():
+                kind, value = self.events.get_nowait()
+                if kind == 'update_ready':
+                    discard_update(value[2])
+        if not self.applying_update:
+            discard_update(self.staged_update)
         for timer in self.tk.call('after', 'info'):
             self.after_cancel(timer)
         self.destroy()

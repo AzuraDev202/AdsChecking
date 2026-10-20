@@ -41,13 +41,24 @@ Sau khi phát hành thành công, đường dẫn tải ổn định là `https:
 
 Maintainer cũng có thể push tag khớp phiên bản (ví dụ `v0.1.0`) để tự chạy cùng quy trình. Build tại máy không tự xuất bản release; file tại `dist/` phải được tải lên GitHub Releases mới có link tải công khai.
 
-### Thông báo cập nhật desktop
+### Cập nhật nền và bản vá desktop
 
-App kiểm tra GitHub Releases khi mở và mỗi giờ khi đang chạy. Nút **Kiểm tra cập nhật** cho phép thử lại thủ công. Khi có bản ổn định mới hơn kèm ZIP Windows sẵn sàng, app hiển thị phiên bản và nút **Tải bản mới**. Lỗi mạng không chặn thao tác Google Ads.
+Từ **0.2.0**, app kiểm tra GitHub Releases khi mở và mỗi giờ; có nút **Kiểm tra cập nhật** để thử lại. Phiên bản mới hơn được phân loại:
 
-Kiểm tra chạy nền qua HTTPS trực tiếp đến API GitHub công khai, không gửi thông tin Google hay proxy đã nhập. Nút tải mở trình duyệt hệ thống. Sau khi kiểm tra SHA-256, đóng app rồi giải nén ZIP vào thư mục mới và mở EXE trong đó.
+- **Bản vá:** chỉ tăng số cuối, ví dụ `0.2.0 → 0.2.1` (sửa lỗi, cải tiến nhỏ).
+- **Cập nhật tính năng:** tăng số giữa hoặc đầu, ví dụ `0.2.1 → 0.3.0` hoặc `1.0.0`.
 
-Trước mỗi release, cập nhật `APP_VERSION` trong `adschecking/updates.py` và dùng tag tương ứng dạng `v1.2.3`. CI từ chối tag không khớp phiên bản. Link tải trực tiếp cần một release công khai có asset `AdsChecking-windows-x64.zip`; app không tự ghi đè EXE.
+App EXE tự tải gói nền qua HTTPS, kiểm tra SHA-256 từ cùng release, đường dẫn ZIP và phiên bản đóng gói, rồi hiện **Khởi động lại để cập nhật**. Trong lúc tải vẫn có thể dùng app. Nếu tải hoặc xác minh thất bại, bản đang dùng giữ nguyên và có nút thử lại.
+
+Bấm khởi động lại khi không còn tác vụ Google hay đăng nhập OAuth đang chờ. App đóng phiên Google cục bộ, chờ tiến trình cũ kết thúc, thay thư mục portable, chạy smoke test rồi mở lại. Cần đăng nhập lại Google sau khi khởi động. Thư mục cài đặt và thư mục cha cần có quyền ghi; nên giải nén app vào thư mục riêng, không dùng chung với tài liệu cá nhân.
+
+Bản cũ được giữ ở thư mục bên cạnh có hậu tố `.backup-...`. Nếu smoke test bản mới lỗi, helper phục hồi và mở bản cũ; gói lỗi được giữ với hậu tố `.failed-...`. Nhật ký ở `%TEMP%/adschecking-update-.../install.log`. Nếu Windows bị tắt giữa lúc thay thư mục, có thể phục hồi thủ công từ backup. Chỉ xóa backup/gói tạm sau khi xác nhận bản mới chạy ổn định.
+
+**Bản 0.1.x cần tải và giải nén 0.2.0 một lần** để có bộ cập nhật này. Những lần sau không phải tự tải/giải nén ZIP. App vẫn tải toàn bộ gói bên trong, chưa hỗ trợ tải phần chênh lệch; không thay mã ngay giữa phiên đang chạy. Đóng app mà chưa áp dụng có thể cần tải lại ở lần mở sau. Chạy bằng Python từ mã nguồn chỉ cung cấp link tải thủ công.
+
+Kiểm tra và tải cập nhật dùng HTTPS trực tiếp đến GitHub/CDN công khai, không gửi thông tin Google hay proxy đã nhập. SHA-256 xác minh tính toàn vẹn theo release GitHub, không phải chữ ký nhà phát hành độc lập. App không tự cấp quyền quản trị.
+
+Trước mỗi release, tăng `APP_VERSION` trong `adschecking/updates.py`, dùng tag khớp phiên bản rồi chạy workflow phát hành. Push code mà không tăng phiên bản và phát hành release sẽ không tạo bản cập nhật. Script build kèm `VERSION.txt` và helper cài đặt vào ZIP; release phải giữ đủ `AdsChecking-windows-x64.zip` và `SHA256SUMS.txt`.
 
 ## Giao diện desktop
 

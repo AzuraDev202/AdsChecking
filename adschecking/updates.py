@@ -3,7 +3,7 @@ import re
 
 import httpx
 
-APP_VERSION = '0.1.0'
+APP_VERSION = '0.2.0'
 REPOSITORY = 'https://github.com/AzuraDev202/AdsChecking'
 DOWNLOAD_URL = REPOSITORY + '/releases/latest/download/AdsChecking-windows-x64.zip'
 RELEASE_API = 'https://api.github.com/repos/AzuraDev202/AdsChecking/releases/latest'
