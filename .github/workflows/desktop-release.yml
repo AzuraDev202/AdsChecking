@@ -1,6 +1,12 @@
 name: Windows desktop
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the Windows ZIP and checksum to GitHub Releases'
+        required: true
+        type: boolean
+        default: false
   push:
     tags: ['v*']
 permissions:
@@ -8,6 +14,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      release_tag: ${{ steps.version.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -16,6 +24,11 @@ jobs:
           architecture: x64
           cache: pip
       - run: python -m pip install -r requirements-build.txt
+      - name: Read desktop release version
+        id: version
+        shell: pwsh
+        run: |
+          python -c "import os; from adschecking.updates import APP_VERSION, version_tuple; version_tuple(APP_VERSION); open(os.environ['GITHUB_OUTPUT'], 'a').write('release_tag=v' + APP_VERSION + '\n')"
       - name: Validate release tag matches desktop version
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
@@ -29,13 +42,17 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: AdsChecking-windows-x64
+          if-no-files-found: error
           path: |
             dist/AdsChecking-windows-x64.zip
             dist/SHA256SUMS.txt
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
     needs: build
     runs-on: ubuntu-latest
+    concurrency:
+      group: desktop-release-${{ needs.build.outputs.release_tag }}
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -47,5 +64,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" release/* --verify-tag --title "AdsChecking $RELEASE_TAG" --generate-notes
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum --check SHA256SUMS.txt
+          gh release create "$RELEASE_TAG" AdsChecking-windows-x64.zip SHA256SUMS.txt --draft --target "$RELEASE_COMMIT" --title "AdsChecking $RELEASE_TAG" --generate-notes
+          gh release edit "$RELEASE_TAG" --draft=false --latest
+      - name: Verify public ZIP download
+        env:
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-delay 5 --retry-all-errors "https://github.com/$GH_REPO/releases/latest/download/AdsChecking-windows-x64.zip" --output release/download-check.zip
+          cd release
+          expected=$(cut -d ' ' -f 1 SHA256SUMS.txt)
+          echo "$expected  download-check.zip" | sha256sum --check

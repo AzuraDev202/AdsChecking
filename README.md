@@ -4,12 +4,22 @@
 
 Bản desktop dành cho Windows 10/11 x64, không cần cài Python.
 
-1. [Tải ZIP Windows mới nhất](https://github.com/AzuraDev202/AdsChecking/releases/latest/download/AdsChecking-windows-x64.zip) hoặc mở [GitHub Releases](https://github.com/AzuraDev202/AdsChecking/releases/latest).
-2. Khi có bản phát hành, tải **AdsChecking-windows-x64.zip** trong mục **Assets** (không chọn Source code).
+**Trạng thái kiểm tra ngày 20/10/2026:** repository chưa có release công khai. Link tải trực tiếp hiện trả về “Not Found”; maintainer cần phát hành theo hướng dẫn bên dưới trước khi người dùng tải được EXE từ Releases.
+
+1. Mở [GitHub Releases](https://github.com/AzuraDev202/AdsChecking/releases).
+2. Khi đã có release, chọn **AdsChecking-windows-x64.zip** trong mục **Assets**. **Code → Download ZIP** và **Source code (zip)** chỉ chứa mã nguồn, không có app EXE đã đóng gói.
 3. Giải nén toàn bộ ZIP rồi mở `AdsChecking/AdsChecking.exe`. Giữ nguyên thư mục `_internal` bên cạnh EXE.
 4. Chuẩn bị proxy HTTP/HTTPS, OAuth Client ID, Client secret và Google Ads developer token của bạn. Ứng dụng không kèm thông tin đăng nhập.
 
 Bản build chưa ký số; Windows có thể hiển thị cảnh báo nhà phát hành chưa xác định. Kiểm tra nguồn tải và đối chiếu SHA-256 với `SHA256SUMS.txt` trên cùng release bằng `Get-FileHash .\AdsChecking-windows-x64.zip -Algorithm SHA256`.
+
+### Nếu link tải hiện “Not Found”
+
+Đây là lỗi tải file trên GitHub, ứng dụng chưa được khởi chạy. Link `/releases/latest/download/...` chỉ hoạt động sau khi có release ổn định đã xuất bản và đính kèm đúng file `AdsChecking-windows-x64.zip`; commit hoặc push mã nguồn chưa tạo ra file tải.
+
+- Mở [danh sách Releases](https://github.com/AzuraDev202/AdsChecking/releases) và tải ZIP trong **Assets**. Nếu danh sách trống, chưa có bản phát hành để tải; đổi đường dẫn hoặc tải lại trang không tạo ra file ZIP.
+- Nếu repository chuyển sang riêng tư, cần đăng nhập GitHub bằng tài khoản có quyền truy cập. Kiểm tra cập nhật tự động trong app dùng API công khai nên cần repository và release công khai.
+- Sau khi tải, giải nén toàn bộ trước khi mở EXE; không chạy EXE trực tiếp từ cửa sổ xem nội dung ZIP.
 
 ### Đóng gói và phát hành
 
@@ -20,7 +30,16 @@ Bản build chưa ký số; Windows có thể hiển thị cảnh báo nhà phá
 
 Script tạo `dist/AdsChecking-windows-x64.zip` và `dist/SHA256SUMS.txt`, đồng thời kiểm tra EXE khởi động và trạng thái khóa đăng nhập ban đầu. Chỉ mã ứng dụng cùng dependency được đóng gói; không thu thập `.env`, dữ liệu phiên hay thư mục kiểm thử.
 
-Workflow [Windows desktop](.github/workflows/desktop-release.yml) chạy kiểm thử, build và kiểm tra EXE trên Windows. Chạy thủ công bằng **Actions → Windows desktop → Run workflow** để tải artifact kiểm tra. Sau khi commit và push mã nguồn, maintainer tạo và push tag phiên bản, ví dụ `v0.1.0`, để workflow tự xuất bản ZIP và checksum vào GitHub Releases. Build tại máy không tự xuất bản release.
+Workflow [Windows desktop](.github/workflows/desktop-release.yml) chạy kiểm thử, build và kiểm tra EXE trên Windows. Sau khi đưa thay đổi workflow và README lên GitHub, maintainer có quyền ghi thực hiện:
+
+1. Vào **Actions → Windows desktop → Run workflow**, chọn nhánh chứa mã nguồn cần phát hành.
+2. Bật **Publish the Windows ZIP and checksum to GitHub Releases** (`publish = true`), rồi chạy workflow. Nếu không bật, workflow chỉ tạo artifact kiểm tra; tải artifact trong trang lần chạy Actions (cần đăng nhập GitHub), giải nén artifact để lấy ZIP ứng dụng bên trong.
+3. Chờ cả job **build** và **release** hoàn tất. Workflow lấy phiên bản từ `APP_VERSION`, tạo tag tương ứng tại commit được build, tải ZIP và checksum vào release nháp rồi mới công khai thành bản mới nhất. Phiên bản phải chưa có release; nếu đã phát hành, tăng `APP_VERSION` trước khi chạy.
+4. Kiểm tra [Releases](https://github.com/AzuraDev202/AdsChecking/releases) có đủ `AdsChecking-windows-x64.zip` và `SHA256SUMS.txt`. Job release tải lại ZIP bằng URL công khai và đối chiếu checksum. Khi đã xác minh thành công, cập nhật dòng trạng thái tải ở đầu README.
+
+Sau khi phát hành thành công, đường dẫn tải ổn định là `https://github.com/AzuraDev202/AdsChecking/releases/latest/download/AdsChecking-windows-x64.zip`. Chỉ dùng đường dẫn này làm link tải chính sau khi kiểm tra thực tế thành công.
+
+Maintainer cũng có thể push tag khớp phiên bản (ví dụ `v0.1.0`) để tự chạy cùng quy trình. Build tại máy không tự xuất bản release; file tại `dist/` phải được tải lên GitHub Releases mới có link tải công khai.
 
 ### Thông báo cập nhật desktop
 
