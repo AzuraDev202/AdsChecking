@@ -57,20 +57,61 @@ jobs:
             dist/AdsChecking-windows-x64.zip
             dist/SHA256SUMS.txt
   release:
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
     needs: build
     runs-on: ubuntu-latest
     concurrency:
-      group: desktop-release-${{ needs.build.outputs.release_tag }}
+      group: desktop-release
       cancel-in-progress: false
     permissions:
       contents: write
     steps:
+      - name: Check whether this version needs publication
+        id: publication
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+        with:
+          script: |
+            const params = {owner: context.repo.owner, repo: context.repo.repo};
+            const tag = process.env.RELEASE_TAG;
+            try {
+              const existing = await github.rest.repos.getReleaseByTag({...params, tag});
+              if (existing.data.draft) {
+                throw new Error(`Release ${tag} is still a draft. Inspect or remove that draft before retrying.`);
+              }
+              core.info(`Release ${tag} already exists; leaving its assets unchanged.`);
+              core.setOutput('publish', 'false');
+              return;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            try {
+              const latest = await github.rest.repos.getLatestRelease(params);
+              const parse = value => {
+                if (!/^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value)) {
+                  throw new Error(`Invalid stable release version: ${value}`);
+                }
+                return value.replace(/^v/, '').split('.').map(Number);
+              };
+              const candidate = parse(tag), current = parse(latest.data.tag_name);
+              const difference = candidate.findIndex((number, index) => number !== current[index]);
+              if (difference === -1 || candidate[difference] < current[difference]) {
+                core.info(`Skipping ${tag}; latest release is ${latest.data.tag_name}.`);
+                core.setOutput('publish', 'false');
+                return;
+              }
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            core.setOutput('publish', 'true');
       - uses: actions/download-artifact@v4
+        if: steps.publication.outputs.publish == 'true'
         with:
           name: AdsChecking-windows-x64
           path: release
       - name: Publish GitHub release
+        if: steps.publication.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -83,11 +124,13 @@ jobs:
           gh release create "$RELEASE_TAG" AdsChecking-windows-x64.zip SHA256SUMS.txt --draft --target "$RELEASE_COMMIT" --title "AdsChecking $RELEASE_TAG" --generate-notes
           gh release edit "$RELEASE_TAG" --draft=false --latest
       - name: Verify public ZIP download
+        if: steps.publication.outputs.publish == 'true'
         env:
           GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
         run: |
           set -euo pipefail
-          curl --fail --location --retry 5 --retry-delay 5 --retry-all-errors "https://github.com/$GH_REPO/releases/latest/download/AdsChecking-windows-x64.zip" --output release/download-check.zip
+          curl --fail --location --retry 5 --retry-delay 5 --retry-all-errors "https://github.com/$GH_REPO/releases/download/$RELEASE_TAG/AdsChecking-windows-x64.zip" --output release/download-check.zip
           cd release
           expected=$(cut -d ' ' -f 1 SHA256SUMS.txt)
           echo "$expected  download-check.zip" | sha256sum --check

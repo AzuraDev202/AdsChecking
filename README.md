@@ -30,13 +30,15 @@ Bản build chưa ký số; Windows có thể hiển thị cảnh báo nhà phá
 
 Script tạo `dist/AdsChecking-windows-x64.zip` và `dist/SHA256SUMS.txt`, đồng thời kiểm tra EXE khởi động và trạng thái khóa đăng nhập ban đầu. Chỉ mã ứng dụng cùng dependency được đóng gói; không thu thập `.env`, dữ liệu phiên hay thư mục kiểm thử.
 
-Workflow [Windows desktop](.github/workflows/desktop-release.yml) tự chạy khi có push vào `main`, gồm cả commit do merge pull request: kiểm thử, build, smoke test EXE và lưu ZIP/checksum trong artifact. Thay đổi trên nhánh khác cần tạo PR và merge vào `main` trước; push nhánh khác hoặc chỉ mở PR không chạy workflow này. Build từ push vào `main` không tự xuất bản release.
+Workflow [Windows desktop](.github/workflows/desktop-release.yml) tự chạy khi có push vào `main`, gồm cả commit do merge pull request: kiểm thử, build, smoke test EXE, lưu artifact và **tự phát hành release nếu `APP_VERSION` là phiên bản mới hơn bản công khai hiện tại**. Thay đổi trên nhánh khác cần tạo PR và merge vào `main` trước; push nhánh khác hoặc chỉ mở PR không chạy workflow này.
+
+Quy trình thông thường: tăng `APP_VERSION` trong PR → merge vào `main` → đợi workflow thành công → app nhận bản mới. Không cần bấm **Run workflow**. Nếu phiên bản đã được phát hành, workflow vẫn test/build nhưng bỏ qua xuất bản, không ghi đè asset cũ. Phiên bản thấp hơn bản mới nhất cũng không được phát hành để tránh hạ phiên bản. Nếu còn release nháp cùng tag từ lần chạy lỗi, kiểm tra hoặc xóa bản nháp đó trước khi chạy lại.
 
 Tag `v*` vẫn dùng để phát hành, nhưng commit gắn tag phải đã nằm trong lịch sử `main`; tag từ nhánh chưa merge sẽ bị chặn trước bước build. Để phát hành cho người dùng, maintainer có quyền ghi thực hiện:
 
-1. Merge thay đổi vào `main`, rồi vào **Actions → Windows desktop → Run workflow** và chọn **main**. Chạy thủ công từ nhánh khác sẽ bỏ qua job build.
+1. Chỉ khi cần chạy lại thủ công: vào **Actions → Windows desktop → Run workflow**, chọn **main**. Chạy thủ công từ nhánh khác sẽ bỏ qua job build.
 2. Bật **Publish the Windows ZIP and checksum to GitHub Releases** (`publish = true`), rồi chạy workflow. Nếu không bật, workflow chỉ tạo artifact kiểm tra; tải artifact trong trang lần chạy Actions (cần đăng nhập GitHub), giải nén artifact để lấy ZIP ứng dụng bên trong.
-3. Chờ cả job **build** và **release** hoàn tất. Workflow lấy phiên bản từ `APP_VERSION`, tạo tag tương ứng tại commit được build, tải ZIP và checksum vào release nháp rồi mới công khai thành bản mới nhất. Phiên bản phải chưa có release; nếu đã phát hành, tăng `APP_VERSION` trước khi chạy.
+3. Chờ cả job **build** và **release** hoàn tất. Khi cần phát hành phiên bản mới, workflow lấy `APP_VERSION`, tạo tag tương ứng tại commit được build, tải ZIP và checksum vào release nháp rồi mới công khai. Phiên bản đã phát hành sẽ được bỏ qua; tăng `APP_VERSION` để xuất bản thay đổi tiếp theo.
 4. Kiểm tra [Releases](https://github.com/AzuraDev202/AdsChecking/releases) có đủ `AdsChecking-windows-x64.zip` và `SHA256SUMS.txt`. Job release tải lại ZIP bằng URL công khai và đối chiếu checksum. Khi đã xác minh thành công, cập nhật dòng trạng thái tải ở đầu README.
 
 Sau khi phát hành thành công, đường dẫn tải ổn định là `https://github.com/AzuraDev202/AdsChecking/releases/latest/download/AdsChecking-windows-x64.zip`. Chỉ dùng đường dẫn này làm link tải chính sau khi kiểm tra thực tế thành công.
